@@ -1,0 +1,39 @@
+#pragma once
+
+#include "driver/gpio.h"
+
+// ── Wi-Fi ────────────────────────────────────────────────────────────────
+#define WIFI_SSID       "YOUR_WIFI_SSID"
+#define WIFI_PASSWORD   "YOUR_WIFI_PASSWORD"
+
+// ── I2S pin assignments ───────────────────────────────────────────────────
+// Matches existing INMP441 / ICS-43434 wiring.
+#define I2S_SCK_PIN     GPIO_NUM_14   // BCLK
+#define I2S_WS_PIN      GPIO_NUM_15   // LRCLK / WS
+#define I2S_SD_PIN      GPIO_NUM_13   // Data in
+
+// ── Audio parameters ──────────────────────────────────────────────────────
+// 16 kHz keeps the whole chain (ESP32 → go2rtc → Frigate -ar 16000) aligned.
+#define SAMPLE_RATE     16000   // Hz
+#define FRAME_SAMPLES   512     // Samples per i2s_channel_read() call
+#define INPUT_BITS      32      // INMP441 delivers 24-bit data in a 32-bit slot
+#define OUTPUT_BITS     16      // RTP L16 payload width
+
+// 44.1 kHz keeps the whole chain (ESP32 → go2rtc → Frigate -ar 44100) aligned.
+// #define SAMPLE_RATE     44100   // Hz
+// #define FRAME_SAMPLES   512     // Lower latency and better RTSP startup stability
+// #define INPUT_BITS      32      // INMP441 delivers 24-bit data in a 32-bit slot
+// #define OUTPUT_BITS     16      // RTP L16 payload width
+
+// Set to 1 for LEFT slot (L/R pin to GND), 0 for RIGHT slot (L/R pin to VDD).
+#define MIC_USE_LEFT_SLOT   1
+
+// One-pole DC blocker strength: larger = lower cutoff (~1-5 Hz here).
+#define DC_BLOCK_SHIFT      10
+
+// Limit abrupt sample-to-sample jumps to suppress occasional click spikes.
+// Set to 0 to disable.
+#define CLICK_LIMIT_DELTA   12000
+
+// ── RTSP ──────────────────────────────────────────────────────────────────
+#define RTSP_PORT       554

@@ -1,0 +1,22 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "IDF v6.0 Terminal",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                ". $HOME/.espressif/v6.0/esp-idf/export.sh && bash"
+            ],
+            "isBackground": false,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "new"
+            },
+            "problemMatcher": []
+        }
+    ]
+}

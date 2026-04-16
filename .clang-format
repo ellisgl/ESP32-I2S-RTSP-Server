@@ -1,0 +1,46 @@
+Language: Cpp
+
+# Column limit
+ColumnLimit: 120
+
+# Indentation
+IndentWidth: 4
+UseTab: Never
+TabWidth: 4
+
+# Spaces
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: true
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+
+# Comments
+AlignTrailingComments: true
+
+# Pointer and reference alignment
+PointerAlignment: Right
+AlignConsecutiveDeclarations: true
+
+# Indent case labels
+IndentCaseLabels: true
+
+# Spaces after keywords
+SpaceAfterCStyleCast: true
+SpaceAfterControlStatementKeyword: true
+SpaceAfterTemplateKeyword: true
+
+# Align operands
+AlignOperands: true
+
+# Brace style
+BreakBeforeBraces: Attach
+
+# Function prototypes
+AlignAfterOpenBracket: DontAlign
+
+# Short statements on a single line
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Preprocessor directives indentation
+IndentPPDirectives: AfterHash

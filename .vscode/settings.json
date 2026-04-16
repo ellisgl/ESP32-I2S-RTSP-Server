@@ -1,0 +1,16 @@
+{
+    
+    "idf.currentSetup": "/home/ellis/.espressif/v6.0/esp-idf",
+    "idf.flashType": "UART",
+    "idf.port": "/dev/ttyUSB0",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32",
+        "IDF_PATH": "/home/ellis/.espressif/v6.0/esp-idf"
+    },
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+    ]
+}

@@ -1,0 +1,18 @@
+# Disable SoftAP to save flash
+CONFIG_ESP_WIFI_SOFTAP_SUPPORT=n
+
+# LWIP — allow SO_REUSEADDR on RTSP TCP socket
+CONFIG_LWIP_SO_REUSE=y
+
+# FreeRTOS tick resolution
+CONFIG_FREERTOS_HZ=1000
+
+# Give app_main enough stack for NVS + WiFi init
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# Single-factory-app partition table (no OTA needed here)
+CONFIG_PARTITION_TABLE_SINGLE_APP=y
+
+# Log level
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
