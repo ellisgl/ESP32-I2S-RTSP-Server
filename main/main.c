@@ -198,7 +198,11 @@ void app_main(void) {
         .sample_rate = SAMPLE_RATE,
     };
     ESP_ERROR_CHECK(rtsp_audio_server_start(&rtsp_cfg));
-
+    
+    // NEW: Initialize and start video server
+    ESP_ERROR_CHECK(rtsp_video_server_init());
+    ESP_ERROR_CHECK(rtsp_video_start_streaming());
+    
     // Audio task pinned to APP_CPU (core 1) so the Wi-Fi/RTSP stack
     // runs freely on PRO_CPU (core 0).
     xTaskCreatePinnedToCore(audio_task, "audio", 4096, NULL, 5, NULL, 1);
