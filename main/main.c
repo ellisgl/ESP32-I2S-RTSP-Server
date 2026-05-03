@@ -13,6 +13,7 @@
 
 #include "app_config.h"
 #include "rtsp_audio_server.h"
+#include "rtsp_video_server.h"
 
 static const char *TAG = "main";
 
