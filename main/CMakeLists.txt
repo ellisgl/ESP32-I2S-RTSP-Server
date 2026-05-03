@@ -3,13 +3,14 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         rtsp_audio_server
+        rtsp_video_server
         esp_wifi
         esp_netif
         esp_event
-    esp_timer
+        esp_timer
         nvs_flash
-    esp_driver_i2s
-    esp_driver_gpio
+        esp_driver_i2s
+        esp_driver_gpio
         log
         freertos
 )
