@@ -6,4 +6,5 @@ idf_component_register(
         esp_timer
         esp_system
         log
+        rtsp_audio_server
 )

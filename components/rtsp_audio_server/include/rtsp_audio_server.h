@@ -32,6 +32,17 @@ esp_err_t rtsp_audio_server_start(const rtsp_audio_server_config_t *cfg);
  */
 void rtsp_audio_server_send_audio(const int16_t *samples, size_t n_samples);
 
+/**
+ * Forward a complete MJPEG RTP packet to all currently-playing RTSP clients
+ * that have the video track set up.
+ *
+ * Thread-safe; call from any task.
+ *
+ * @param pkt      Complete RTP packet including header.
+ * @param pkt_len  Packet length in bytes.
+ */
+void rtsp_audio_server_send_video_packet(const uint8_t *pkt, size_t pkt_len);
+
 #ifdef __cplusplus
 }
 #endif

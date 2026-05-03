@@ -1,4 +1,5 @@
 #include "rtsp_video_server.h"
+#include "rtsp_audio_server.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -18,12 +19,10 @@ static const char *TAG = "rtsp_video";
 #define MAX_MJPEG_FRAME_SIZE       16384
 #define MJPEG_RTP_PAYLOAD_TYPE     26
 #define VIDEO_RTP_CLOCK_RATE       90000
-#define VIDEO_TASK_STACK           4096
+#define VIDEO_TASK_STACK           6144
 #define VIDEO_TASK_PRIORITY        5
 
 // ── Hardcoded 8×8 black JPEG frame ────────────────────────────────────────
-// This is a minimal 8×8 all-black JPEG (179 bytes).
-// Replace with your own JPEG data or generate dynamically.
 
 static const uint8_t s_black_jpeg[] = {
     0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
@@ -61,21 +60,19 @@ static const uint8_t s_black_jpeg[] = {
 typedef struct {
     uint8_t  data[MAX_MJPEG_FRAME_SIZE];
     size_t   size;
-    uint32_t ssrc;
     uint16_t seq;
     uint32_t ts;
 } frame_buffer_t;
 
-static frame_buffer_t      s_frame_buf;
-static SemaphoreHandle_t   s_frame_mutex;
-static uint32_t            s_video_ssrc;
+static frame_buffer_t    s_frame_buf;
+static SemaphoreHandle_t s_frame_mutex;
+static uint32_t          s_video_ssrc;
+
+// Packet buffer lives in static DRAM, not on the task stack (16 KB + headers).
+static uint8_t s_pkt_buf[12 + 8 + MAX_MJPEG_FRAME_SIZE];
 
 // ── RTP Packet Builder ─────────────────────────────────────────────────────
 
-/**
- * Build MJPEG RTP packet header and payload.
- * Returns total packet size.
- */
 static size_t build_mjpeg_rtp_packet(uint8_t *pkt, size_t max_len,
                                       uint16_t seq, uint32_t ts,
                                       const uint8_t *jpeg_data, size_t jpeg_size)
@@ -84,7 +81,7 @@ static size_t build_mjpeg_rtp_packet(uint8_t *pkt, size_t max_len,
         return 0;
 
     // RTP header (12 bytes)
-    pkt[0]  = 0x80;                           // V=2, P=0, X=0, CC=0
+    pkt[0]  = 0x80;
     pkt[1]  = 0x80 | MJPEG_RTP_PAYLOAD_TYPE; // M=1, PT=26
     pkt[2]  = (seq >> 8) & 0xFF;
     pkt[3]  = seq & 0xFF;
@@ -97,22 +94,19 @@ static size_t build_mjpeg_rtp_packet(uint8_t *pkt, size_t max_len,
     pkt[10] = (s_video_ssrc >> 8) & 0xFF;
     pkt[11] = s_video_ssrc & 0xFF;
 
-    // MJPEG RTP header extension (8 bytes, per RFC 2435)
-    // Type-specific (bit 7), Fragment Offset (24 bits), Type (8 bits), Q (8 bits),
-    // Width (8 bits), Height (8 bits)
-    pkt[12] = 0x00;     // Type-specific (0 for frame start)
-    pkt[13] = 0x00;     // Fragment offset (24-bit, high byte)
-    pkt[14] = 0x00;     // Fragment offset (middle byte)
-    pkt[15] = 0x00;     // Fragment offset (low byte)
-    pkt[16] = 0x01;     // Type (1 = baseline JPEG)
-    pkt[17] = 0x00;     // Q (0 = default quantization)
-    pkt[18] = 0x08;     // Width in units of 8 pixels (8 → 64 pixels)
-    pkt[19] = 0x08;     // Height in units of 8 pixels (8 → 64 pixels)
+    // MJPEG RTP header (8 bytes, RFC 2435)
+    pkt[12] = 0x00;  // Type-specific / fragment offset high byte
+    pkt[13] = 0x00;  // Fragment offset
+    pkt[14] = 0x00;
+    pkt[15] = 0x00;
+    pkt[16] = 0x01;  // Type = 1 (baseline JPEG)
+    pkt[17] = 0x5F;  // Q=95 (0 is reserved per RFC 2435)
+    pkt[18] = 0x01;  // Width  in 8-px units: 1 → 8 px
+    pkt[19] = 0x01;  // Height in 8-px units: 1 → 8 px
 
-    // Copy JPEG payload
-    size_t payload_offset = 20;
+    const size_t payload_offset = 20;
     if (payload_offset + jpeg_size > max_len)
-        return 0;  // Packet too large
+        return 0;
 
     memcpy(pkt + payload_offset, jpeg_data, jpeg_size);
     return payload_offset + jpeg_size;
@@ -124,10 +118,9 @@ static void frame_buffer_init(void)
 {
     s_frame_buf.size = sizeof(s_black_jpeg);
     memcpy(s_frame_buf.data, s_black_jpeg, s_frame_buf.size);
-    s_frame_buf.ssrc = esp_random();
     s_frame_buf.seq = 0;
-    s_frame_buf.ts = 0;
-    s_video_ssrc = s_frame_buf.ssrc;
+    s_frame_buf.ts  = 0;
+    s_video_ssrc    = esp_random();
 
     ESP_LOGI(TAG, "Frame buffer initialized (default black JPEG: %zu bytes, SSRC=0x%08" PRIx32 ")",
              s_frame_buf.size, s_video_ssrc);
@@ -146,18 +139,6 @@ static esp_err_t frame_buffer_update(const uint8_t *frame_data, size_t frame_siz
     return ESP_OK;
 }
 
-static void frame_buffer_get_snapshot(uint8_t *out_data, size_t *out_size,
-                                       uint16_t *out_seq, uint32_t *out_ts)
-{
-    xSemaphoreTake(s_frame_mutex, portMAX_DELAY);
-    memcpy(out_data, s_frame_buf.data, s_frame_buf.size);
-    *out_size = s_frame_buf.size;
-    *out_seq = s_frame_buf.seq++;
-    *out_ts = s_frame_buf.ts;
-    s_frame_buf.ts += VIDEO_RTP_CLOCK_RATE / VIDEO_FRAME_RATE_HZ;
-    xSemaphoreGive(s_frame_mutex);
-}
-
 // ── Video frame task ───────────────────────────────────────────────────────
 
 static void video_frame_task(void *pvParam)
@@ -165,42 +146,37 @@ static void video_frame_task(void *pvParam)
     ESP_LOGI(TAG, "Video frame task started (%d fps, SSRC=0x%08" PRIx32 ")",
              VIDEO_FRAME_RATE_HZ, s_video_ssrc);
 
-    uint8_t  pkt_buf[12 + 8 + MAX_MJPEG_FRAME_SIZE];  // RTP header + MJPEG header + payload
-    uint8_t  frame_data[MAX_MJPEG_FRAME_SIZE];
-    size_t   frame_size;
-    uint16_t seq;
-    uint32_t ts;
-
+    const int64_t frame_interval_us = 1000000 / VIDEO_FRAME_RATE_HZ;
     int64_t last_frame_us = esp_timer_get_time();
-    int64_t frame_interval_us = 1000000 / VIDEO_FRAME_RATE_HZ;
 
     while (true) {
-        int64_t now_us = esp_timer_get_time();
-        int64_t elapsed_us = now_us - last_frame_us;
+        int64_t now_us   = esp_timer_get_time();
+        int64_t elapsed  = now_us - last_frame_us;
 
-        if (elapsed_us < frame_interval_us) {
-            vTaskDelay(pdMS_TO_TICKS((frame_interval_us - elapsed_us) / 1000));
+        if (elapsed < frame_interval_us) {
+            vTaskDelay(pdMS_TO_TICKS((frame_interval_us - elapsed) / 1000));
             continue;
         }
-
         last_frame_us = now_us;
 
-        // Get current frame snapshot
-        frame_buffer_get_snapshot(frame_data, &frame_size, &seq, &ts);
+        // Build RTP packet directly from s_frame_buf while holding the mutex.
+        // The memcpy is brief for the small placeholder; acceptable for 1 fps.
+        xSemaphoreTake(s_frame_mutex, portMAX_DELAY);
+        uint16_t seq       = s_frame_buf.seq++;
+        uint32_t ts        = s_frame_buf.ts;
+        s_frame_buf.ts    += VIDEO_RTP_CLOCK_RATE / VIDEO_FRAME_RATE_HZ;
+        size_t pkt_size    = build_mjpeg_rtp_packet(s_pkt_buf, sizeof(s_pkt_buf),
+                                                    seq, ts,
+                                                    s_frame_buf.data, s_frame_buf.size);
+        xSemaphoreGive(s_frame_mutex);
 
-        // Build RTP packet
-        size_t pkt_size = build_mjpeg_rtp_packet(pkt_buf, sizeof(pkt_buf), seq, ts,
-                                                  frame_data, frame_size);
         if (pkt_size == 0) {
-            ESP_LOGW(TAG, "Failed to build RTP packet (frame size %zu)", frame_size);
+            ESP_LOGW(TAG, "Failed to build RTP packet");
             continue;
         }
 
-        // TODO: Send packet to RTSP clients via rtsp_audio_server
-        // This requires integration with the audio server's client list and sockets.
-        // For now, log the frame info:
-        ESP_LOGD(TAG, "Video frame: seq=%u ts=%" PRIu32 " size=%zu bytes",
-                 seq, ts, pkt_size);
+        rtsp_audio_server_send_video_packet(s_pkt_buf, pkt_size);
+        ESP_LOGD(TAG, "Video frame: seq=%u ts=%" PRIu32 " size=%zu", seq, ts, pkt_size);
     }
 }
 
