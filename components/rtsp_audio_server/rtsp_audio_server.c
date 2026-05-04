@@ -328,6 +328,7 @@ static void rtsp_server_task(void *pvParam)
     s_listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (s_listen_sock < 0) {
         ESP_LOGE(TAG, "TCP socket failed: %d", errno);
+        close(s_rtp_sock);
         vTaskDelete(NULL);
         return;
     }
@@ -342,6 +343,8 @@ static void rtsp_server_task(void *pvParam)
     if (bind(s_listen_sock, (struct sockaddr *)&saddr, sizeof(saddr)) != 0 ||
         listen(s_listen_sock, MAX_CLIENTS) != 0) {
         ESP_LOGE(TAG, "bind/listen failed: %d", errno);
+        close(s_rtp_sock);
+        close(s_listen_sock);
         vTaskDelete(NULL);
         return;
     }
